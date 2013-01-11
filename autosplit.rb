@@ -12,25 +12,41 @@
 
 require 'rubygems'
 require 'RMagick'
+require 'optparse'
+
+
 
 
 
 # split_image separates a jpg into two files, based on a center
 # and adds to each of them a buffer of 2% of the width of
 # the original
-def split_image(filename, image, center)
+def split_image(filename, image, center, options)
   image_both = image #Magick::ImageList.new(input_file)
   half = center # image_both.columns / 2
   two_percent = image_both.columns / 50
 #  print "lhs = image_both.crop(0, 0, #{half+two_percent}, #{image_both.rows})\n"
   lhs = image_both.crop(0, 0, half+two_percent, image_both.rows)
   ext = File.extname(filename)
-  lhs.write(filename.sub(ext, "_left#{ext}"))
+
+  if options[:vertical]
+    lhs.rotate(270).write(filename.sub(ext, "_below#{ext}"))  
+  else
+    lhs.write(filename.sub(ext, "_left#{ext}"))  
+  end
+
+
   start = half - two_percent
   width = image_both.columns - start
 #  print "rhs = image_both.crop(#{start}, 0, #{width}, #{image_both.rows})\n"
   rhs = image_both.crop(start, 0, width, image_both.rows)
-  rhs.write(filename.sub(ext, "_right#{ext}"))
+
+  if options[:vertical]
+    rhs.rotate(270).write(filename.sub(ext, "_above#{ext}"))  
+  else
+    rhs.write(filename.sub(ext, "_right#{ext}"))  
+  end
+
   GC.start
 end
 
@@ -38,7 +54,7 @@ end
 # draw_line is useful for debugging and testing
 # it paints a red line on the part of the image passed in x
 #
-def draw_line(filename, image, x)
+def draw_line(filename, image, x, options)
   cols = image.columns
   rows = image.rows
   redline = []
@@ -47,7 +63,12 @@ def draw_line(filename, image, x)
   end
   image.store_pixels(x-1,0,3,rows, redline)
   ext = File.extname(filename)
-  image.write(filename.sub(ext, ".autosplit#{ext}"))
+  
+  if options[:vertical]
+    image.rotate!(270)
+  end
+
+  image.write(filename.sub(ext, "_autosplit#{ext}"))
 end
 
 
@@ -86,15 +107,52 @@ def find_spine(filename, image)
 end
 
 
+options = {}
 
+optparse = OptionParser.new do|opts|
+  options[:vertical] = false
+  opts.on( '-v', '--vertical', "Split images vertically (for notebook bindings)" ) do
+    options[:vertical] = true
+  end  
 
+  options[:line_only] = false
+  opts.on( '-l', '--line_only', "Draw a line on autodetected spine and write new image to .autosplit files" ) do
+    options[:line_only] = true
+  end  
+
+  options[:vertical] = false
+  opts.on( '-v', '--vertical', "Split images vertically (for notebook bindings)" ) do
+    options[:vertical] = true
+  end  
+
+  # This displays the help screen, all programs are
+  # assumed to have this option.
+  opts.on( '-h', '--help', 'Display this screen' ) do
+    puts opts
+    exit
+  end
+end
+
+# Parse the command-line. Remember there are two forms
+# of the parse method. The 'parse' method simply parses
+# ARGV, while the 'parse!' method parses ARGV and removes
+# any options found there, as well as any parameters for
+# the options. What's left is the list of files to resize.
+optparse.parse!
 
 
 ARGV.each do |filename|
+  p options
   deskewed_image = Magick::ImageList.new(filename).deskew
   image = deskewed_image#.edge
+  if options[:vertical]
+    image.rotate!(90)
+  end
   center = find_spine(filename, image)
-  draw_line(filename, image, center)
-#  split_image(filename, image, center)
+  if options[:line_only]
+    draw_line(filename, image, center, options)
+  else
+    split_image(filename, image, center, options)
+  end
   GC.start
 end
