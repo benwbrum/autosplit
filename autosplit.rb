@@ -24,7 +24,9 @@ require 'optparse'
 def split_image(filename, image, center, options)
   image_both = image #Magick::ImageList.new(input_file)
   half = center # image_both.columns / 2
-  two_percent = image_both.columns / 50
+  
+  # allow the percentage of slop to be variable rather than hard-wired to 2%
+  two_percent = image_both.columns * ( options[:fudge_factor] / 100 )
 #  print "lhs = image_both.crop(0, 0, #{half+two_percent}, #{image_both.rows})\n"
   lhs = image_both.crop(0, 0, half+two_percent, image_both.rows)
   ext = File.extname(filename)
@@ -125,6 +127,11 @@ optparse = OptionParser.new do|opts|
     options[:vertical] = true
   end  
 
+  options[:fudge_factor] = 2.0
+  
+  opts.on( '-f', '--fudge_factor NUM', Float, "Percentage of 'slop' to add over autodetected spine when cropping. (default 2)" ) do|f|
+    options[:fudge_factor] = f
+  end
   # This displays the help screen, all programs are
   # assumed to have this option.
   opts.on( '-h', '--help', 'Display this screen' ) do
