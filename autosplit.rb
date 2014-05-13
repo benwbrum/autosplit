@@ -112,11 +112,11 @@ end
 options = {}
 
 optparse = OptionParser.new do|opts|
-  options[:vertical] = false
-  opts.on( '-v', '--vertical', "Split images vertically (for notebook bindings)" ) do
-    options[:vertical] = true
+  options[:no_detect] = false
+  opts.on( '-n', '--no_detect', "Do not attempt to detect the spine, but split images down the middle" ) do
+    options[:no_detect] = true
   end  
-
+  
   options[:line_only] = false
   opts.on( '-l', '--line_only', "Draw a line on autodetected spine and write new image to .autosplit files" ) do
     options[:line_only] = true
@@ -155,7 +155,13 @@ ARGV.each do |filename|
   if options[:vertical]
     image.rotate!(90)
   end
-  center = find_spine(filename, image)
+  
+  if options[:no_detect]
+    center = image.columns / 2 #just split them in half
+  else
+    center = find_spine(filename, image)
+  end
+
   if options[:line_only]
     draw_line(filename, image, center, options)
   else
