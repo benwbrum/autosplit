@@ -13,7 +13,7 @@
 require 'rubygems'
 require 'RMagick'
 require 'optparse'
-
+require 'pry'
 
 
 
@@ -34,7 +34,9 @@ def split_image(filename, image, center, options)
   if options[:vertical]
     lhs.rotate(270).write(filename.sub(ext, "_below#{ext}"))  
   else
-    lhs.write(filename.sub(ext, "_left#{ext}"))  
+    if :spine_side == "right" || :spine_side == "center"
+      lhs.write(filename.sub(ext, "_left#{ext}"))  
+    end
   end
 
 
@@ -46,7 +48,9 @@ def split_image(filename, image, center, options)
   if options[:vertical]
     rhs.rotate(270).write(filename.sub(ext, "_above#{ext}"))  
   else
-    rhs.write(filename.sub(ext, "_right#{ext}"))  
+    if :spine_side == "left" || :spine_side == "center"
+      lhs.write(filename.sub(ext, "_right#{ext}"))  
+    end
   end
 
   GC.start
@@ -78,14 +82,25 @@ end
 # find_spine returns the X value of the darkest vertical
 # stripe in the middle of the image
 #
-def find_spine(filename, image)
+def find_spine(filename, image, spine_side)
   cols = image.columns
   rows = image.rows
 
-  # only pay attention to the middle 20% of the image
-  ten_percent = (cols.to_f / 10).to_i
-  start_x = (cols/2) - ten_percent
-  end_x = (cols/2) + ten_percent
+  if spine_side == "center"
+    # only pay attention to the middle 20% of the image
+    ten_percent = (cols.to_f / 10).to_i
+    start_x = (cols/2) - ten_percent
+    end_x = (cols/2) + ten_percent
+  elsif spine_side == "right"
+  # pay attention to the right side of the image
+    twenty_percent = (cols.to_f / 5).to_i
+    start_x = cols - twenty_percent
+    end_x = cols - 1
+  elsif spine_side == "left"
+    twenty_percent = (cols.to_f / 5).to_i
+    start_x = 0
+    end_x = 0 + twenty_percent
+  end
 
   # there must be a rubyier way of finding the max value
   darkest_x = 0
@@ -132,6 +147,12 @@ optparse = OptionParser.new do|opts|
   opts.on( '-f', '--fudge_factor NUM', Float, "Percentage of 'slop' to add over autodetected spine when cropping. (default 2)" ) do|f|
     options[:fudge_factor] = f
   end
+
+  options[:spine_side] = "center"
+  opts.on( '-s', '--spine_side left', String, "Look for the spine in the left, right, or center of the image. (default center)" ) do|side|
+    options[:spine_side] = side
+  end
+
   # This displays the help screen, all programs are
   # assumed to have this option.
   opts.on( '-h', '--help', 'Display this screen' ) do
@@ -159,7 +180,7 @@ ARGV.each do |filename|
   if options[:no_detect]
     center = image.columns / 2 #just split them in half
   else
-    center = find_spine(filename, image)
+    center = find_spine(filename, image, options[:spine_side])
   end
 
   if options[:line_only]
