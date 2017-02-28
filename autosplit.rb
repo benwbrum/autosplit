@@ -1,8 +1,10 @@
 #!/usr/bin/env ruby
 #
-# Split is used for separating two-page scans into recto and verso images.
-# It operates on directories and sub-directories full of images, appending
-# "_left" and "_right" to the original filenames.
+# Join is used for combining single-page scans into a single image 
+# corresponding to an opening.
+# It operates on directories and sub-directories full of images, and 
+# assumes that file naming conventions imply verso/recto/verso/recto
+# ordering
 #
 # Dependencies: 
 #   ruby
@@ -11,11 +13,51 @@
 #   RMagick gem
 
 require 'rubygems'
-require 'RMagick'
+require 'rmagick'
 require 'optparse'
 require 'pry'
+require 'pry-byebug'
+
+def preprocess_verso(filename)
+  # call autosplit
+  system("autosplit.rb --trim --fudge_factor 0 --spine_side right #{filename}")
+  # return left filename  
+  ext = File.extname(filename)
+  filename.sub(ext, "_left#{ext}")
+end
 
 
+def preprocess_recto(filename)
+  # call autosplit
+  system("autosplit.rb --trim --fudge_factor 0 --spine_side left #{filename}")
+  # return right filename
+  ext = File.extname(filename)
+  filename.sub(ext, "_right#{ext}")
+end
+
+def join_opening(verso, recto)
+  # read files
+  image = Magick::ImageList.new(verso, recto)
+  # stretch when needed
+  # append
+  image.append(false)
+  # write files
+  ext = File.extname(verso)
+  image.write(verso.sub(ext, recto))
+end
+
+def process_directory(directory)
+  left_filename = nil
+  Dir.glob(File.join(directory, "*.*")).sort.each_with_index do |filename, i|
+    if i % 2 == 0
+      left_filename = preprocess_verso(filename)
+    else
+      right_filename = preprocess_recto(filename)
+      
+      join_opening(left_filename, right_filename)
+    end
+  end
+end
 
 
 # split_image separates a jpg into two files, based on a center
@@ -29,12 +71,13 @@ def split_image(filename, image, center, options)
   two_percent = image_both.columns * ( options[:fudge_factor] / 100 )
 #  print "lhs = image_both.crop(0, 0, #{half+two_percent}, #{image_both.rows})\n"
   lhs = image_both.crop(0, 0, half+two_percent, image_both.rows)
+ 
   ext = File.extname(filename)
 
   if options[:vertical]
     lhs.rotate(270).write(filename.sub(ext, "_below#{ext}"))  
   else
-    if :spine_side == "right" || :spine_side == "center"
+    if options[:spine_side] == "right" || options[:spine_side] == "center"
       lhs.write(filename.sub(ext, "_left#{ext}"))  
     end
   end
@@ -48,8 +91,8 @@ def split_image(filename, image, center, options)
   if options[:vertical]
     rhs.rotate(270).write(filename.sub(ext, "_above#{ext}"))  
   else
-    if :spine_side == "left" || :spine_side == "center"
-      lhs.write(filename.sub(ext, "_right#{ext}"))  
+    if options[:spine_side] == "left" || options[:spine_side] == "center"
+      rhs.write(filename.sub(ext, "_right#{ext}"))  
     end
   end
 
@@ -75,6 +118,35 @@ def draw_line(filename, image, x, options)
   end
 
   image.write(filename.sub(ext, "_autosplit#{ext}"))
+end
+
+
+def find_edge(image, x_fraction, orientation)
+  x = (image.columns.to_f * x_fraction).to_i
+  
+  if orientation == :top
+    pixels = image.get_pixels(x,0,1,(image.rows * 0.3).to_i)
+    brightness = pixels.map {|p| p.red+p.green+p.blue }       
+  else
+    pixels = image.get_pixels(x,(image.rows * 0.7).to_i,1,(image.rows * 0.3).to_i)
+    brightness = pixels.map {|p| p.red+p.green+p.blue }.reverse       
+  end
+  
+  (brightness.size - 10).times do |i|
+    slice = brightness[i .. i+10]
+    slice_brightness = slice.inject(0) { |accum,el| accum+el }
+    return i if slice_brightness > 1000000 # this works for black-and-white scans
+  end
+  
+end
+
+
+def trim(image)
+  top_border = [find_edge(image, 0.4, :top), find_edge(image, 0.5, :top), find_edge(image, 0.6, :top)].min
+  
+  bottom_border = [find_edge(image, 0.4, :bottom), find_edge(image, 0.5, :bottom), find_edge(image, 0.6, :bottom)].min
+  
+  image.crop(0, top_border, image.columns, image.rows-bottom_border)
 end
 
 
@@ -127,10 +199,18 @@ end
 options = {}
 
 optparse = OptionParser.new do|opts|
-  options[:no_detect] = false
-  opts.on( '-n', '--no_detect', "Do not attempt to detect the spine, but split images down the middle" ) do
-    options[:no_detect] = true
+  opts.banner = "Usage: autosplit.rb [options] file1 [file2 file3...]"
+
+  options[:no_detect] = nil
+  opts.on( '-n', '--no_detect NUM', Integer, "Do not attempt to detect the spine, but split images on a fixed percentage (default 50)" ) do |center|
+    options[:no_detect] = center.to_i
   end  
+  
+  options[:trim] = false
+  opts.on( '-t', '--trim', "Trim dark background from top and bottom of image" ) do
+    options[:trim] = true
+  end  
+
   
   options[:line_only] = false
   opts.on( '-l', '--line_only', "Draw a line on autodetected spine and write new image to .autosplit files" ) do
@@ -168,17 +248,27 @@ end
 # the options. What's left is the list of files to resize.
 optparse.parse!
 
+if ARGV.empty?
+  puts optparse.help
+  exit 
+end
 
 ARGV.each do |filename|
-  p options
-  deskewed_image = Magick::ImageList.new(filename).deskew
-  image = deskewed_image#.edge
+#  p options
+  image = Magick::ImageList.new(filename)
+
   if options[:vertical]
     image.rotate!(90)
   end
+
+  if options[:trim]
+    image = trim(image)
+  end
   
+  image = image.deskew
+
   if options[:no_detect]
-    center = image.columns / 2 #just split them in half
+    center = image.columns * (options[:no_detect] * 0.01) #just split them by percentage
   else
     center = find_spine(filename, image, options[:spine_side])
   end
