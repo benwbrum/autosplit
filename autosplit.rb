@@ -13,7 +13,7 @@
 #   RMagick gem
 
 require 'rubygems'
-require 'rmagick'
+require 'RMagick'
 require 'optparse'
 require 'pry'
 require 'pry-byebug'
@@ -144,7 +144,7 @@ end
 def trim(image)
   top_border = [find_edge(image, 0.4, :top), find_edge(image, 0.5, :top), find_edge(image, 0.6, :top)].min
   
-  bottom_border = [find_edge(image, 0.4, :bottom), find_edge(image, 0.5, :bottom), find_edge(image, 0.6, :bottom)].min
+  bottom_border = [find_edge(image, 0.2, :bottom), find_edge(image, 0.5, :bottom), find_edge(image, 0.8, :bottom)].min
   
   image.crop(0, top_border, image.columns, image.rows-bottom_border)
 end
