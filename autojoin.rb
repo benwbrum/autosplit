@@ -42,15 +42,21 @@ def preprocess_recto(filename)
   filename.sub(ext, "_right#{ext}")
 end
 
+
 def join_opening(verso, recto)
   # read files
-  image = Magick::ImageList.new(verso, recto)
+  image_list = Magick::ImageList.new(verso, recto)
   # stretch when needed
   # append
-  new_image = image.append(false)
+  max_height = [image_list[0].rows, image_list[1].rows].max
+  max_width = [image_list[0].columns, image_list[1].columns].max
+  
+    new_image = image_list.montage {
+    self.geometry = "#{max_width}x#{max_height}+0+0"
+  }
   # write files
   out = verso.sub("_left", "_opening")
-  p out
+
   new_image.write(out)
 end
 
