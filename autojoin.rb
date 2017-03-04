@@ -11,7 +11,7 @@
 #   RMagick gem
 
 require 'rubygems'
-require 'rmagick'
+require 'RMagick'
 require 'optparse'
 require 'pry'
 require 'pry-byebug'
@@ -23,7 +23,8 @@ end
 
 def preprocess_verso(filename)
   # call autosplit
-  call = "#{autosplit} --trim --fudge_factor 0 --no_detect 95 --spine_side right \"#{filename}\""
+  call = "#{autosplit} --trim --no_detect 90 --fudge_factor 0 --spine_side right \"#{filename}\""
+#  call = "#{autosplit} --trim --fudge_factor 0 --spine_side right \"#{filename}\""
   p call
   system(call)
   # return left filename  
