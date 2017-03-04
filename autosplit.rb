@@ -1,10 +1,8 @@
 #!/usr/bin/env ruby
 #
-# Join is used for combining single-page scans into a single image 
-# corresponding to an opening.
-# It operates on directories and sub-directories full of images, and 
-# assumes that file naming conventions imply verso/recto/verso/recto
-# ordering
+# Split is used for separating two-page scans into recto and verso images.
+# It operates on directories and sub-directories full of images, appending
+# "_left" and "_right" to the original filenames.
 #
 # Dependencies: 
 #   ruby
@@ -18,47 +16,6 @@ require 'optparse'
 require 'pry'
 require 'pry-byebug'
 
-def preprocess_verso(filename)
-  # call autosplit
-  system("autosplit.rb --trim --fudge_factor 0 --spine_side right #{filename}")
-  # return left filename  
-  ext = File.extname(filename)
-  filename.sub(ext, "_left#{ext}")
-end
-
-
-def preprocess_recto(filename)
-  # call autosplit
-  system("autosplit.rb --trim --fudge_factor 0 --spine_side left #{filename}")
-  # return right filename
-  ext = File.extname(filename)
-  filename.sub(ext, "_right#{ext}")
-end
-
-def join_opening(verso, recto)
-  # read files
-  image = Magick::ImageList.new(verso, recto)
-  # stretch when needed
-  # append
-  image.append(false)
-  # write files
-  ext = File.extname(verso)
-  image.write(verso.sub(ext, recto))
-end
-
-def process_directory(directory)
-  left_filename = nil
-  Dir.glob(File.join(directory, "*.*")).sort.each_with_index do |filename, i|
-    if i % 2 == 0
-      left_filename = preprocess_verso(filename)
-    else
-      right_filename = preprocess_recto(filename)
-      
-      join_opening(left_filename, right_filename)
-    end
-  end
-end
-
 
 # split_image separates a jpg into two files, based on a center
 # and adds to each of them a buffer of 2% of the width of
@@ -70,7 +27,7 @@ def split_image(filename, image, center, options)
   # allow the percentage of slop to be variable rather than hard-wired to 2%
   two_percent = image_both.columns * ( options[:fudge_factor] / 100 )
 #  print "lhs = image_both.crop(0, 0, #{half+two_percent}, #{image_both.rows})\n"
-  lhs = image_both.crop(0, 0, half+two_percent, image_both.rows)
+  lhs = image_both.crop(0, 0, half+two_percent, image_both.rows, true)
  
   ext = File.extname(filename)
 
@@ -86,7 +43,7 @@ def split_image(filename, image, center, options)
   start = half - two_percent
   width = image_both.columns - start
 #  print "rhs = image_both.crop(#{start}, 0, #{width}, #{image_both.rows})\n"
-  rhs = image_both.crop(start, 0, width, image_both.rows)
+  rhs = image_both.crop(start, 0, width, image_both.rows, true)
 
   if options[:vertical]
     rhs.rotate(270).write(filename.sub(ext, "_above#{ext}"))  
@@ -146,7 +103,7 @@ def trim(image)
   
   bottom_border = [find_edge(image, 0.2, :bottom), find_edge(image, 0.5, :bottom), find_edge(image, 0.8, :bottom)].min
   
-  image.crop(0, top_border, image.columns, image.rows-bottom_border)
+  image.crop(0, top_border, image.columns, image.rows-bottom_border, true)
 end
 
 
