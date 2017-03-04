@@ -92,9 +92,10 @@ def find_edge(image, x_fraction, orientation)
   (brightness.size - 10).times do |i|
     slice = brightness[i .. i+10]
     slice_brightness = slice.inject(0) { |accum,el| accum+el }
-    return i if slice_brightness > 1000000 # this works for black-and-white scans
+#    print "Slice #{x_fraction} #{i}\t=\t#{slice_brightness}\n"
+    return i if slice_brightness > 1500000 # this works for black-and-white scans
   end
-  
+  0
 end
 
 
@@ -102,8 +103,9 @@ def trim(image)
   top_border = [find_edge(image, 0.4, :top), find_edge(image, 0.5, :top), find_edge(image, 0.6, :top)].min
   
   bottom_border = [find_edge(image, 0.2, :bottom), find_edge(image, 0.5, :bottom), find_edge(image, 0.8, :bottom)].min
-  
-  image.crop(0, top_border, image.columns, image.rows-bottom_border, true)
+
+  trimmed_height = image.rows - (top_border+bottom_border)
+  image.crop(0, top_border, image.columns, trimmed_height, true)
 end
 
 
